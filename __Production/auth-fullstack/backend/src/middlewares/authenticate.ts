@@ -1,32 +1,38 @@
 import { AppErrorCode } from "@/constants/appErrorCode.js";
 import { OK, UNAUTHORIZED } from "@/constants/http.js";
-import { SessionModel } from "@/models/session.model.js";
 import { appAssert } from "@/utils/appAssert.js";
-import { clearAuthCookies } from "@/utils/cookies.js";
 import { verifyToken } from "@/utils/jwt.js";
 import type { RequestHandler } from "express";
-import type mongoose from "mongoose";
+import type { Types } from "mongoose";
 
-export const authenticate: RequestHandler = async (req, res, next) => {
-  const accessToken = req.cookies.accessToken as string | undefined;
-  appAssert(
-    accessToken,
-    UNAUTHORIZED,
-    "Not authorized",
-    AppErrorCode.InvalidAccessToken
-  );
+export const authenticate: RequestHandler = (req, res, next) => {
+  try {
+    const accessToken = req.cookies?.accessToken as string | undefined;
 
-  const { error, payload } = verifyToken(accessToken);
-  appAssert(
-    payload,
-    UNAUTHORIZED,
-    error === "jwt expired" ? "Token expired" : "Invalid token",
-    AppErrorCode.InvalidAccessToken
-  );
+    if (!accessToken) {
+      return next({
+        status: UNAUTHORIZED,
+        message: "Not authorized",
+        code: AppErrorCode.InvalidAccessToken,
+      });
+    }
 
-  // add userId & sessionId to req handler
-  req.userId = payload.userId as mongoose.Types.ObjectId;
-  req.sessionId = payload.sessionId as mongoose.Types.ObjectId;
- 
-  next();
+    const { error, payload } = verifyToken(accessToken);
+
+    if (!payload) {
+      return next({
+        status: UNAUTHORIZED,
+        message: error === "jwt expired" ? "Token expired" : "Invalid token",
+        code: AppErrorCode.InvalidAccessToken,
+      });
+    }
+
+    // Add userId & sessionId to the request object
+    req.userId = payload.userId as Types.ObjectId;
+    req.sessionId = payload.sessionId as Types.ObjectId;
+
+    next();
+  } catch (err) {
+    next(err);
+  }
 };
